@@ -37,8 +37,16 @@ TSN Configurations:
         """.format(base_model, self.modality, self.num_segments, self.new_length, consensus_type, self.dropout)))
 
         self._prepare_base_model(base_model)
+        print(self.base_model)
+        print(getattr(self.base_model, self.base_model.last_layer_name))
 
         feature_dim = self._prepare_tsn(num_class)
+        print(self.base_model)
+        print(getattr(self.base_model, self.base_model.last_layer_name))
+        print(self.base_model.last_layer_name)
+        for name, module in self.base_model.named_modules():
+            print(name)
+        input('...')
 
         if self.modality == 'Flow':
             print("Converting the ImageNet model to a flow init model")
@@ -189,22 +197,29 @@ TSN Configurations:
 
     def forward(self, input):
         sample_len = (3 if self.modality == "RGB" else 2) * self.new_length
+        print(input.size())
+        print(input.view((-1, sample_len) + input.size()[-2:]).size())
 
         if self.modality == 'RGBDiff':
             sample_len = 3 * self.new_length
             input = self._get_diff(input)
 
         base_out = self.base_model(input.view((-1, sample_len) + input.size()[-2:]))
+        print(base_out.size())
 
         if self.dropout > 0:
             base_out = self.new_fc(base_out)
+        print('after dropout: ',base_out.size())
 
         if not self.before_softmax:
             base_out = self.softmax(base_out)
         if self.reshape:
             base_out = base_out.view((-1, self.num_segments) + base_out.size()[1:])
 
+        print('after reshape: ', base_out.size())
         output = self.consensus(base_out)
+        print('after consensus: ', output.size())
+        input('stop...')
         return output.squeeze(1)
 
     def _get_diff(self, input, keep_rgb=False):

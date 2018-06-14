@@ -6,6 +6,23 @@ import numbers
 import math
 import torch
 
+class ReverseGroupNormalize(object):
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, tensor):
+        rep_mean = self.mean * (tensor.size()[0]//len(self.mean))
+        rep_std = self.std * (tensor.size()[0]//len(self.std))
+
+        # TODO: make efficient
+        # print(tensor.size())
+        # print('reverse before:', tensor)
+        for t, m, s in zip(tensor, rep_mean, rep_std):
+            t.mul_(s).add_(m)
+            # t.sub_(m).div_(s)
+        # print('reverse after:', tensor)
+        return tensor
 
 class GroupRandomCrop(object):
     def __init__(self, size):
@@ -69,9 +86,13 @@ class GroupNormalize(object):
         rep_mean = self.mean * (tensor.size()[0]//len(self.mean))
         rep_std = self.std * (tensor.size()[0]//len(self.std))
 
+        # print(tensor.size())
+        # print('before:', tensor)
         # TODO: make efficient
         for t, m, s in zip(tensor, rep_mean, rep_std):
             t.sub_(m).div_(s)
+        # print(tensor.size())
+        # print('after:', tensor)
 
         return tensor
 
@@ -131,12 +152,14 @@ class GroupOverSample(object):
 
 class GroupMultiScaleCrop(object):
 
-    def __init__(self, input_size, scales=None, max_distort=1, fix_crop=True, more_fix_crop=True):
-        self.scales = scales if scales is not None else [1, 875, .75, .66]
+    def __init__(self, input_size, scales=None, max_distort=1, 
+            fix_crop=True, more_fix_crop=True):
+        self.scales = scales if scales is not None else [1, .875, .75, .66]
         self.max_distort = max_distort
         self.fix_crop = fix_crop
         self.more_fix_crop = more_fix_crop
-        self.input_size = input_size if not isinstance(input_size, int) else [input_size, input_size]
+        self.input_size = input_size if not isinstance(input_size, int) \
+                else [input_size, input_size]
         self.interpolation = Image.BILINEAR
 
     def __call__(self, img_group):
@@ -144,8 +167,10 @@ class GroupMultiScaleCrop(object):
         im_size = img_group[0].size
 
         crop_w, crop_h, offset_w, offset_h = self._sample_crop_size(im_size)
-        crop_img_group = [img.crop((offset_w, offset_h, offset_w + crop_w, offset_h + crop_h)) for img in img_group]
-        ret_img_group = [img.resize((self.input_size[0], self.input_size[1]), self.interpolation)
+        crop_img_group = [img.crop((offset_w, offset_h, 
+            offset_w + crop_w, offset_h + crop_h)) for img in img_group]
+        ret_img_group = [img.resize((self.input_size[0], 
+            self.input_size[1]), self.interpolation)
                          for img in crop_img_group]
         return ret_img_group
 
@@ -155,8 +180,10 @@ class GroupMultiScaleCrop(object):
         # find a crop size
         base_size = min(image_w, image_h)
         crop_sizes = [int(base_size * x) for x in self.scales]
-        crop_h = [self.input_size[1] if abs(x - self.input_size[1]) < 3 else x for x in crop_sizes]
-        crop_w = [self.input_size[0] if abs(x - self.input_size[0]) < 3 else x for x in crop_sizes]
+        crop_h = [self.input_size[1] if abs(x - self.input_size[1]) < 3 \
+                else x for x in crop_sizes]
+        crop_w = [self.input_size[0] if abs(x - self.input_size[0]) < 3 \
+                else x for x in crop_sizes]
 
         pairs = []
         for i, h in enumerate(crop_h):
@@ -169,12 +196,14 @@ class GroupMultiScaleCrop(object):
             w_offset = random.randint(0, image_w - crop_pair[0])
             h_offset = random.randint(0, image_h - crop_pair[1])
         else:
-            w_offset, h_offset = self._sample_fix_offset(image_w, image_h, crop_pair[0], crop_pair[1])
+            w_offset, h_offset = self._sample_fix_offset(image_w, 
+                    image_h, crop_pair[0], crop_pair[1])
 
         return crop_pair[0], crop_pair[1], w_offset, h_offset
 
     def _sample_fix_offset(self, image_w, image_h, crop_w, crop_h):
-        offsets = self.fill_fix_offset(self.more_fix_crop, image_w, image_h, crop_w, crop_h)
+        offsets = self.fill_fix_offset(self.more_fix_crop, image_w, 
+                image_h, crop_w, crop_h)
         return random.choice(offsets)
 
     @staticmethod
